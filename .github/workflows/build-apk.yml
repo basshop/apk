@@ -1,50 +1,22 @@
-name: Build APK
+name: texxxx
+description: "SMS Notification App for Money Transfer"
+publish_to: 'none'
+version: 1.0.0+1
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:
+environment:
+  sdk: '>=3.0.0 <4.0.0'
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.1.0
+  cupertino_icons: ^1.0.8
+  permission_handler: ^11.3.1
 
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'zulu'
-        java-version: '17'
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
 
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.24.0'
-        channel: 'stable'
-
-    - name: Get dependencies
-      run: flutter pub get
-
-    - name: Build APK
-      run: flutter build apk --release
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: release-apk
-        path: build/app/outputs/flutter-apk/app-release.apk
-
-    - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: v1.0.${{ github.run_number }}
-        name: Release v1.0.${{ github.run_number }}
-        files: build/app/outputs/flutter-apk/app-release.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+flutter:
+  uses-material-design: true

@@ -351,36 +351,16 @@ class _MainScreenState extends State<MainScreen> {
             fontSize: 20,
           ),
         ),
-        actions: [
-          if (isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadMessages,
-              tooltip: 'รีเฟรช',
-            ),
-        ],
       ),
       body: moneyMessages.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.account_balance_wallet_outlined,
-                      size: 64, color: Colors.grey),
+                  const Icon(Icons.account_balance_wallet_outlined, size: 64, color: Colors.grey),
                   const SizedBox(height: 16),
                   Text(
-                    'ยังไม่มีการแจ้งเตือนเงินเข้า',
+                    'ยังไม่มีรายการเงินเข้า',
                     style: GoogleFonts.ibmPlexSansThai(
                       fontSize: 18,
                       color: Colors.grey,
@@ -389,105 +369,34 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
             )
-          : RefreshIndicator(
-              onRefresh: _loadMessages,
-              child: ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: moneyMessages.length,
-                itemBuilder: (context, index) {
-                  final message = moneyMessages[index];
-                  return _buildMessageCard(message, isMoneyMessage: true);
-                },
-              ),
+          : ListView.builder(
+              itemCount: moneyMessages.length,
+              itemBuilder: (context, index) {
+                final message = moneyMessages[index];
+                return _buildMessageCard(message);
+              },
             ),
     );
   }
 
-  Widget _buildComposePage() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.edit_outlined, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            'สร้างข้อความใหม่',
-            style: GoogleFonts.ibmPlexSansThai(fontSize: 18),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'ฟีเจอร์นี้กำลังพัฒนา',
-            style: GoogleFonts.ibmPlexSansThai(fontSize: 14, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildComposePage() => const Center(child: Text('หน้าสร้างข้อความ'));
+  Widget _buildActivityPage() => const Center(child: Text('หน้ากิจกรรม'));
+  Widget _buildProfilePage() => const Center(child: Text('หน้าโปรไฟล์'));
 
-  Widget _buildActivityPage() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.favorite_outline, size: 64, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            'กิจกรรม',
-            style: GoogleFonts.ibmPlexSansThai(fontSize: 18),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'ดูกิจกรรมทั้งหมดของคุณที่นี่',
-            style: GoogleFonts.ibmPlexSansThai(fontSize: 14, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfilePage() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircleAvatar(
-            radius: 50,
-            backgroundColor: Colors.blue,
-            child: Icon(Icons.person, size: 50, color: Colors.white),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'โปรไฟล์ของคุณ',
-            style: GoogleFonts.ibmPlexSansThai(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'จัดการข้อมูลส่วนตัวของคุณ',
-            style: GoogleFonts.ibmPlexSansThai(fontSize: 14, color: Colors.grey),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageCard(SmsMessage message, {bool isMoneyMessage = false}) {
+  Widget _buildMessageCard(SmsMessage message) {
     final date = DateTime.fromMillisecondsSinceEpoch(message.date);
-    
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
       child: ListTile(
-        contentPadding: const EdgeInsets.all(12),
+        contentPadding: const EdgeInsets.all(16),
         leading: CircleAvatar(
-          backgroundColor: isMoneyMessage ? Colors.green : Colors.blue,
-          child: Icon(
-            isMoneyMessage ? Icons.attach_money : Icons.message,
-            color: Colors.white,
-          ),
+          backgroundColor: Colors.grey[100],
+          child: const Icon(Icons.message, color: Colors.black),
         ),
         title: Text(
           message.address,
