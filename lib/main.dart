@@ -45,9 +45,9 @@ class SmsMessage {
 
   factory SmsMessage.fromMap(Map<dynamic, dynamic> map) {
     return SmsMessage(
-      address: map['address'] ?? 'Unknown',
-      body: map['body'] ?? '',
-      date: map['date'] ?? 0,
+      address: map['address']?.toString() ?? 'Unknown',
+      body: map['body']?.toString() ?? '',
+      date: int.tryParse(map['date']?.toString() ?? '0') ?? 0,
     );
   }
 }
@@ -63,6 +63,7 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   List<SmsMessage> allMessages = [];
   List<SmsMessage> moneyMessages = [];
+  bool isLoading = false;
   
   static const platform = MethodChannel('com.smsapp/sms');
 
@@ -73,14 +74,19 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _requestPermissions() async {
-    final smsStatus = await Permission.sms.request();
-    
-    if (smsStatus.isGranted) {
-      _loadMessages();
-    } else if (smsStatus.isPermanentlyDenied) {
-      _showPermissionDialog();
-    } else {
-      _showPermissionDeniedSnackbar();
+    try {
+      final smsStatus = await Permission.sms.request();
+      
+      if (smsStatus.isGranted) {
+        await _loadMessages();
+      } else if (smsStatus.isPermanentlyDenied) {
+        if (mounted) _showPermissionDialog();
+      } else {
+        if (mounted) _showPermissionDeniedSnackbar();
+      }
+    } catch (e) {
+      debugPrint('Permission error: $e');
+      if (mounted) _showErrorSnackbar('เกิดข้อผิดพลาดในการขอสิทธิ์');
     }
   }
 
@@ -129,18 +135,48 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _loadMessages() async {
+    if (isLoading) return;
+    
+    setState(() {
+      isLoading = true;
+    });
+
     try {
+      final status = await Permission.sms.status;
+      if (!status.isGranted) {
+        if (mounted) {
+          _showErrorSnackbar('กรุณาอนุญาตสิทธิ์ SMS ก่อน');
+        }
+        return;
+      }
+
       final List<dynamic> messages = await platform.invokeMethod('getInboxSms');
       
-      setState(() {
-        allMessages = messages.map((msg) => SmsMessage.fromMap(msg)).toList();
-        moneyMessages = allMessages
-            .where((msg) => _isMoneyMessage(msg.body))
-            .toList();
-      });
+      if (mounted) {
+        setState(() {
+          allMessages = messages.map((msg) => SmsMessage.fromMap(msg)).toList();
+          allMessages.sort((a, b) => b.date.compareTo(a.date));
+          moneyMessages = allMessages
+              .where((msg) => _isMoneyMessage(msg.body))
+              .toList();
+        });
+      }
     } on PlatformException catch (e) {
       debugPrint("Failed to get SMS: ${e.message}");
-      _showErrorSnackbar('ไม่สามารถโหลดข้อความได้: ${e.message}');
+      if (mounted) {
+        _showErrorSnackbar('ไม่สามารถโหลดข้อความได้: ${e.message}');
+      }
+    } catch (e) {
+      debugPrint("Unexpected error: $e");
+      if (mounted) {
+        _showErrorSnackbar('เกิดข้อผิดพลาดที่ไม่คาดคิด');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
@@ -149,6 +185,7 @@ class _MainScreenState extends State<MainScreen> {
       SnackBar(
         content: Text(message, style: GoogleFonts.ibmPlexSansThai()),
         backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -168,6 +205,8 @@ class _MainScreenState extends State<MainScreen> {
       'บัญชี',
       'ถอนเงิน',
       'จ่ายเงิน',
+      'ชำระเงิน',
+      'ยอดคงเหลือ',
     ];
     
     return moneyKeywords.any((keyword) => 
@@ -245,11 +284,23 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadMessages,
-            tooltip: 'รีเฟรช',
-          ),
+          if (isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadMessages,
+              tooltip: 'รีเฟรช',
+            ),
         ],
       ),
       body: allMessages.isEmpty
@@ -260,27 +311,32 @@ class _MainScreenState extends State<MainScreen> {
                   const Icon(Icons.message_outlined, size: 64, color: Colors.grey),
                   const SizedBox(height: 16),
                   Text(
-                    'ยังไม่มีข้อความ',
+                    isLoading ? 'กำลังโหลด...' : 'ยังไม่มีข้อความ',
                     style: GoogleFonts.ibmPlexSansThai(
                       fontSize: 18,
                       color: Colors.grey,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _loadMessages,
-                    icon: const Icon(Icons.refresh),
-                    label: Text('โหลดข้อความ', style: GoogleFonts.ibmPlexSansThai()),
-                  ),
+                  if (!isLoading)
+                    TextButton.icon(
+                      onPressed: _loadMessages,
+                      icon: const Icon(Icons.refresh),
+                      label: Text('โหลดข้อความ', style: GoogleFonts.ibmPlexSansThai()),
+                    ),
                 ],
               ),
             )
-          : ListView.builder(
-              itemCount: allMessages.length,
-              itemBuilder: (context, index) {
-                final message = allMessages[index];
-                return _buildMessageCard(message);
-              },
+          : RefreshIndicator(
+              onRefresh: _loadMessages,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: allMessages.length,
+                itemBuilder: (context, index) {
+                  final message = allMessages[index];
+                  return _buildMessageCard(message);
+                },
+              ),
             ),
     );
   }
@@ -296,11 +352,23 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadMessages,
-            tooltip: 'รีเฟรช',
-          ),
+          if (isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadMessages,
+              tooltip: 'รีเฟรช',
+            ),
         ],
       ),
       body: moneyMessages.isEmpty
@@ -321,12 +389,16 @@ class _MainScreenState extends State<MainScreen> {
                 ],
               ),
             )
-          : ListView.builder(
-              itemCount: moneyMessages.length,
-              itemBuilder: (context, index) {
-                final message = moneyMessages[index];
-                return _buildMessageCard(message, isMoneyMessage: true);
-              },
+          : RefreshIndicator(
+              onRefresh: _loadMessages,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: moneyMessages.length,
+                itemBuilder: (context, index) {
+                  final message = moneyMessages[index];
+                  return _buildMessageCard(message, isMoneyMessage: true);
+                },
+              ),
             ),
     );
   }

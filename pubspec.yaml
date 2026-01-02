@@ -13,11 +13,8 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # UI & Styling
   google_fonts: ^6.1.0
   cupertino_icons: ^1.0.8
-  
-  # Permissions (ใช้แค่ตัวนี้เท่านั้น)
   permission_handler: ^11.3.1
 
 dev_dependencies:
