@@ -4,10 +4,6 @@ buildscript {
     }
 }
 
-allprojects {
-    // ❌ อย่าใส่ repositories ตรงนี้
-}
-
 tasks.register<Delete>("clean") {
     delete(rootProject.buildDir)
 }
