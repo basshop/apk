@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:telephony/telephony.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -32,6 +32,26 @@ class SMSApp extends StatelessWidget {
   }
 }
 
+class SmsMessage {
+  final String address;
+  final String body;
+  final int date;
+
+  SmsMessage({
+    required this.address,
+    required this.body,
+    required this.date,
+  });
+
+  factory SmsMessage.fromMap(Map<dynamic, dynamic> map) {
+    return SmsMessage(
+      address: map['address'] ?? 'Unknown',
+      body: map['body'] ?? '',
+      date: map['date'] ?? 0,
+    );
+  }
+}
+
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -41,23 +61,26 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-  final Telephony telephony = Telephony.instance;
   List<SmsMessage> allMessages = [];
   List<SmsMessage> moneyMessages = [];
+  
+  static const platform = MethodChannel('com.smsapp/sms');
 
   @override
   void initState() {
     super.initState();
     _requestPermissions();
-    _setupSmsListener();
   }
 
   Future<void> _requestPermissions() async {
-    final status = await Permission.sms.request();
-    if (status.isGranted) {
+    final smsStatus = await Permission.sms.request();
+    
+    if (smsStatus.isGranted) {
       _loadMessages();
-    } else {
+    } else if (smsStatus.isPermanentlyDenied) {
       _showPermissionDialog();
+    } else {
+      _showPermissionDeniedSnackbar();
     }
   }
 
@@ -90,29 +113,43 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Future<void> _loadMessages() async {
-    List<SmsMessage> messages = await telephony.getInboxSms(
-      columns: [SmsColumn.ADDRESS, SmsColumn.BODY, SmsColumn.DATE],
-      sortOrder: [OrderBy(SmsColumn.DATE, sort: Sort.DESC)],
+  void _showPermissionDeniedSnackbar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'กรุณาอนุญาตสิทธิ์ SMS เพื่อใช้งานแอป',
+          style: GoogleFonts.ibmPlexSansThai(),
+        ),
+        action: SnackBarAction(
+          label: 'ตั้งค่า',
+          onPressed: () => _requestPermissions(),
+        ),
+      ),
     );
-
-    setState(() {
-      allMessages = messages;
-      moneyMessages = messages.where((msg) => _isMoneyMessage(msg.body ?? '')).toList();
-    });
   }
 
-  void _setupSmsListener() {
-    telephony.listenIncomingSms(
-      onNewMessage: (SmsMessage message) {
-        setState(() {
-          allMessages.insert(0, message);
-          if (_isMoneyMessage(message.body ?? '')) {
-            moneyMessages.insert(0, message);
-          }
-        });
-      },
-      listenInBackground: false,
+  Future<void> _loadMessages() async {
+    try {
+      final List<dynamic> messages = await platform.invokeMethod('getInboxSms');
+      
+      setState(() {
+        allMessages = messages.map((msg) => SmsMessage.fromMap(msg)).toList();
+        moneyMessages = allMessages
+            .where((msg) => _isMoneyMessage(msg.body))
+            .toList();
+      });
+    } on PlatformException catch (e) {
+      debugPrint("Failed to get SMS: ${e.message}");
+      _showErrorSnackbar('ไม่สามารถโหลดข้อความได้: ${e.message}');
+    }
+  }
+
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.ibmPlexSansThai()),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 
@@ -129,6 +166,8 @@ class _MainScreenState extends State<MainScreen> {
       'transfer',
       'received',
       'บัญชี',
+      'ถอนเงิน',
+      'จ่ายเงิน',
     ];
     
     return moneyKeywords.any((keyword) => 
@@ -148,24 +187,9 @@ class _MainScreenState extends State<MainScreen> {
         children: [
           _buildAllNotifications(),
           _buildMoneyNotifications(),
-          Center(
-            child: Text(
-              'สร้างข้อความใหม่',
-              style: GoogleFonts.ibmPlexSansThai(fontSize: 18),
-            ),
-          ),
-          Center(
-            child: Text(
-              'กิจกรรม',
-              style: GoogleFonts.ibmPlexSansThai(fontSize: 18),
-            ),
-          ),
-          Center(
-            child: Text(
-              'โปรไฟล์',
-              style: GoogleFonts.ibmPlexSansThai(fontSize: 18),
-            ),
-          ),
+          _buildComposePage(),
+          _buildActivityPage(),
+          _buildProfilePage(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -224,6 +248,7 @@ class _MainScreenState extends State<MainScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadMessages,
+            tooltip: 'รีเฟรช',
           ),
         ],
       ),
@@ -240,6 +265,12 @@ class _MainScreenState extends State<MainScreen> {
                       fontSize: 18,
                       color: Colors.grey,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _loadMessages,
+                    icon: const Icon(Icons.refresh),
+                    label: Text('โหลดข้อความ', style: GoogleFonts.ibmPlexSansThai()),
                   ),
                 ],
               ),
@@ -268,6 +299,7 @@ class _MainScreenState extends State<MainScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadMessages,
+            tooltip: 'รีเฟรช',
           ),
         ],
       ),
@@ -299,10 +331,78 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  Widget _buildComposePage() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.edit_outlined, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            'สร้างข้อความใหม่',
+            style: GoogleFonts.ibmPlexSansThai(fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'ฟีเจอร์นี้กำลังพัฒนา',
+            style: GoogleFonts.ibmPlexSansThai(fontSize: 14, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityPage() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.favorite_outline, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            'กิจกรรม',
+            style: GoogleFonts.ibmPlexSansThai(fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'ดูกิจกรรมทั้งหมดของคุณที่นี่',
+            style: GoogleFonts.ibmPlexSansThai(fontSize: 14, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfilePage() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircleAvatar(
+            radius: 50,
+            backgroundColor: Colors.blue,
+            child: Icon(Icons.person, size: 50, color: Colors.white),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'โปรไฟล์ของคุณ',
+            style: GoogleFonts.ibmPlexSansThai(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'จัดการข้อมูลส่วนตัวของคุณ',
+            style: GoogleFonts.ibmPlexSansThai(fontSize: 14, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMessageCard(SmsMessage message, {bool isMoneyMessage = false}) {
-    final date = message.date != null
-        ? DateTime.fromMillisecondsSinceEpoch(message.date!)
-        : DateTime.now();
+    final date = DateTime.fromMillisecondsSinceEpoch(message.date);
     
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -318,7 +418,7 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ),
         title: Text(
-          message.address ?? 'ไม่ทราบผู้ส่ง',
+          message.address,
           style: GoogleFonts.ibmPlexSansThai(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
@@ -326,7 +426,7 @@ class _MainScreenState extends State<MainScreen> {
           children: [
             const SizedBox(height: 4),
             Text(
-              message.body ?? '',
+              message.body,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.ibmPlexSansThai(),
@@ -372,13 +472,27 @@ class _MainScreenState extends State<MainScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          message.address ?? 'ไม่ทราบผู้ส่ง',
+          message.address,
           style: GoogleFonts.ibmPlexSansThai(fontWeight: FontWeight.bold),
         ),
         content: SingleChildScrollView(
-          child: Text(
-            message.body ?? '',
-            style: GoogleFonts.ibmPlexSansThai(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                message.body,
+                style: GoogleFonts.ibmPlexSansThai(),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _formatDate(DateTime.fromMillisecondsSinceEpoch(message.date)),
+                style: GoogleFonts.ibmPlexSansThai(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
           ),
         ),
         actions: [

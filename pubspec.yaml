@@ -1,5 +1,5 @@
 name: texxxx
-description: "A new Flutter project."
+description: "SMS Notification App for Money Transfer"
 
 publish_to: 'none'
 
@@ -11,23 +11,18 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  # UI & Styling
   google_fonts: ^6.1.0
-
-
   cupertino_icons: ^1.0.8
-
-  # 👉 เพิ่ม 2 ตัวนี้
-  telephony: ^0.2.0
+  
+  # Permissions (ใช้แค่ตัวนี้เท่านั้น)
   permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true
-
-
-
